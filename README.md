@@ -1,7 +1,8 @@
 # Repositório de Códigos para AWS
 
 <p align="center">
-  <img src="https://upload.wikimedia.org/wikipedia/commons/9/93/Amazon_Web_Services_Logo.svg" alt="AWS Logo" width="150">
+  <img src="https://jeffersoncastilho.com.br/wp-content/uploads/2026/01/aws-logo.png" alt="AWS Logo" width="600">
+  <br>
   <br>
   <em>Scripts, automações e templates de infraestrutura como código para o ecossistema AWS.</em>
 </p>
