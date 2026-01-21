@@ -23,7 +23,6 @@ Este repositório contém exemplos e utilitários construídos com as seguintes 
 <p align="center">
   <a href="https://aws.amazon.com/"><img src="https://img.shields.io/badge/AWS-%23232F3E.svg?style=for-the-badge&logo=amazon-aws&logoColor=white" alt="AWS"></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python"></a>
-  <a href="https://www.terraform.io/"><img src="https://img.shields.io/badge/Terraform-%235835CC.svg?style=for-the-badge&logo=terraform&logoColor=white" alt="Terraform"></a>
   <a href="https://www.gnu.org/software/bash/"><img src="https://img.shields.io/badge/Shell_Script-%23121011.svg?style=for-the-badge&logo=gnu-bash&logoColor=white" alt="Shell Script"></a>
 </p>
 
@@ -32,7 +31,6 @@ Este repositório contém exemplos e utilitários construídos com as seguintes 
 O conteúdo está organizado por tecnologia:
 
 -   **`/python`**: Scripts em Python para automação de tarefas na AWS com Boto3.
--   **`/terraform`**: Código de Infraestrutura como Código (IaC) para provisionar recursos.
 -   **`/shell`**: Scripts de linha de comando para automações e tarefas de administração.
 
 ## Como Usar
