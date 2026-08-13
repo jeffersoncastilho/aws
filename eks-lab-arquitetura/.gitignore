@@ -1,0 +1,28 @@
+# --- Terraform ---
+# Diretório de trabalho (providers, plugins) — nunca versionar
+**/.terraform/*
+
+# State e backups (ficam no S3, não no git)
+*.tfstate
+*.tfstate.*
+
+# Crash logs
+crash.log
+crash.*.log
+
+# Variáveis com valores reais — versione só os *.example
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+
+# Backend com bucket real — versione só o backend.hcl.example
+backend.hcl
+
+# Arquivos de override
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# OBS: .terraform.lock.hcl NÃO é ignorado de propósito — ele DEVE ser versionado
+# para travar as versões dos providers entre execuções.

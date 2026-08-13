@@ -9,8 +9,9 @@ module "eks" {
   # ⚠️ Com endpoint privado, kubectl/Terraform (providers kubernetes/helm) precisam
   #    rodar de DENTRO da VPC (bastion EC2 ou VPN). O único ponto exposto à
   #    internet é o ALB do Ingress (exposição via LB).
-  cluster_endpoint_public_access  = var.cluster_endpoint_public_access
-  cluster_endpoint_private_access = var.cluster_endpoint_private_access
+  cluster_endpoint_public_access       = var.cluster_endpoint_public_access
+  cluster_endpoint_public_access_cidrs = var.cluster_endpoint_public_access_cidrs
+  cluster_endpoint_private_access      = var.cluster_endpoint_private_access
 
   # 🔑 IRSA: cria e associa o OIDC provider do cluster à AWS.
   # É o que permite um ServiceAccount assumir uma Role do IAM (sem chaves estáticas).

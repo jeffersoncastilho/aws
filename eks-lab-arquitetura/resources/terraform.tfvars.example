@@ -9,3 +9,18 @@
 state_bucket = "SEU-BUCKET-TFSTATE"
 region       = "us-east-1"
 cluster_name = "lab-arquitetura"
+
+# Stack 'network' — quantidade de AZs.
+#   2 = mínimo do EKS e mais barato (padrão do lab)
+#   3 = mais resiliente (tolera falha de uma zona) — recomendado p/ produção
+az_count = 2
+
+# Stack 'eks' — acesso à API do cluster.
+# Padrão do lab: SOMENTE PRIVADO (rode os stacks 5–8 de dentro do bastion).
+#
+# 🧪 MODO PROVISÓRIO (desenvolvimento): expõe a API na internet TRAVADA no seu IP,
+#    para rodar TODOS os stacks direto da sua máquina, sem clonar no bastion.
+#    Descubra seu IP:  curl -s https://checkip.amazonaws.com
+#    Depois volte para false quando terminar o lab.
+# cluster_endpoint_public_access       = true
+# cluster_endpoint_public_access_cidrs = ["SEU.IP.PUBLICO.AQUI/32"]

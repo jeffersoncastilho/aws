@@ -48,3 +48,9 @@ variable "cluster_endpoint_public_access" {
   type        = bool
   default     = false
 }
+
+variable "cluster_endpoint_public_access_cidrs" {
+  description = "CIDRs com acesso à API pública (só se cluster_endpoint_public_access = true). ⚠️ Restrinja ao seu IP."
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+}

@@ -154,3 +154,46 @@ resource "aws_vpc_endpoint" "ssm" {
     Name = "${var.name}-${each.value}"
   }
 }
+
+# =============================================================================
+# Preferências regionais do Session Manager (documento SSM-SessionManagerRunShell).
+# Guarda config de sessão (KMS, logs, timeout...) no nível da REGIÃO/conta.
+# Gerenciamos aqui para garantir que o kmsKeyId aponte para uma chave válida
+# — ou fique vazio (sem KMS) — evitando o erro "KMS ... Key does not exist"
+# que encerra a sessão logo após conectar.
+#
+# ⚠️ Documento já existe na conta (criado pelo console/lab anterior)? Faça UMA vez:
+#      terraform -chdir=bastion import \
+#        'module.bastion.aws_ssm_document.session_prefs[0]' SSM-SessionManagerRunShell
+#    e depois `apply` (que corrige o kmsKeyId). Alternativa: apagar antes com
+#      aws ssm delete-document --name SSM-SessionManagerRunShell
+# =============================================================================
+resource "aws_ssm_document" "session_prefs" {
+  count           = var.manage_session_manager_prefs ? 1 : 0
+  name            = "SSM-SessionManagerRunShell"
+  document_type   = "Session"
+  document_format = "JSON"
+
+  content = jsonencode({
+    schemaVersion = "1.0"
+    description   = "Document to hold regional settings for Session Manager"
+    sessionType   = "Standard_Stream"
+    inputs = {
+      s3BucketName                = ""
+      s3KeyPrefix                 = ""
+      s3EncryptionEnabled         = true
+      cloudWatchLogGroupName      = ""
+      cloudWatchEncryptionEnabled = true
+      cloudWatchStreamingEnabled  = true
+      idleSessionTimeout          = "30"
+      maxSessionDuration          = ""
+      kmsKeyId                    = var.session_kms_key_id
+      runAsEnabled                = false
+      runAsDefaultUser            = ""
+      shellProfile = {
+        windows = ""
+        linux   = ""
+      }
+    }
+  })
+}

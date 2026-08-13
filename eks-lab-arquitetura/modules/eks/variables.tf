@@ -25,6 +25,12 @@ variable "cluster_endpoint_public_access" {
   default     = false
 }
 
+variable "cluster_endpoint_public_access_cidrs" {
+  description = "CIDRs autorizados na API pública do cluster. Só tem efeito se cluster_endpoint_public_access = true. ⚠️ Padrão aberto (0.0.0.0/0) — RESTRINJA ao seu IP, ex: [\"203.0.113.10/32\"]."
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+}
+
 variable "cluster_endpoint_private_access" {
   description = "Permitir acesso privado à API do cluster (dentro da VPC)."
   type        = bool

@@ -1,0 +1,13 @@
+# Config de backend COMPARTILHADA por todos os stacks.
+# Copie para backend.hcl e edite o bucket UMA vez:
+#   cp backend.hcl.example backend.hcl
+#   terraform -chdir=<stack> init -backend-config=../backend.hcl
+#
+# A 'key' (caminho do state) é definida no versions.tf de cada stack.
+#
+# Lock nativo do S3 (use_lockfile) — não precisa de DynamoDB (deprecado).
+# Requer Terraform >= 1.10.
+bucket       = "SEU-BUCKET-TFSTATE"
+region       = "us-east-1"
+use_lockfile = true
+encrypt      = true

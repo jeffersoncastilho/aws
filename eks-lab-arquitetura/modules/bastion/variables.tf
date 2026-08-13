@@ -42,3 +42,15 @@ variable "endpoint_subnet_ids" {
   type        = list(string)
   default     = []
 }
+
+variable "manage_session_manager_prefs" {
+  description = "Gerenciar o documento regional SSM-SessionManagerRunShell (preferências do Session Manager). Garante que o kmsKeyId seja válido e evita o erro 'Key does not exist' ao conectar."
+  type        = bool
+  default     = true
+}
+
+variable "session_kms_key_id" {
+  description = "KMS key id/ARN para criptografar as sessões do Session Manager. Vazio = sem KMS (padrão do lab, mais simples/barato)."
+  type        = string
+  default     = ""
+}

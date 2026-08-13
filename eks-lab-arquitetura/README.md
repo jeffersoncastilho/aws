@@ -12,6 +12,8 @@ Infra base, em **módulos Terraform**, para estudar os pontos arquiteturais de u
 
 > A **execução** (`terraform apply`, `kubectl`, etc.) é feita por você. Aqui está só a base versionada.
 
+> 📖 **Estudo complementar:** [Observabilidade em EKS — Prometheus & Dynatrace](docs/OBSERVABILIDADE-EKS.md) (conceitual, prep. de entrevista) · [Stack ADOT → AMP → Grafana](docs/OBSERVABILIDADE-STACK-ADOT-AMP.md) (guia prático em Terraform).
+
 ---
 
 ## ⚠️ Custo (conta nova / free tier)
@@ -51,7 +53,8 @@ eks-lab-arquitetura/
     ├── governanca/           # stack 4 — lê: eks
     ├── irsa/                 # stack 5 — lê: eks, governanca
     ├── exposicao/            # stack 6 — lê: eks, governanca, irsa
-    └── bastion/              # stack 7 — lê: network, eks
+    ├── bastion/              # stack 7 — lê: network, eks
+    └── demo-s3-writer/       # stack 8 — lê: network, eks, governanca
 ```
 
 > Cada stack tem o próprio state no S3 (`key` diferente) e lê os outputs dos
@@ -73,9 +76,10 @@ Aplique **um stack por vez, nesta ordem**. Cada linha é uma pasta em `resources
 | 5 | `governanca` | Namespace + ResourceQuota + LimitRange + NetworkPolicy | **bastion** | `terraform -chdir=governanca apply` |
 | 6 | `irsa` | Role IAM (trust OIDC) + ServiceAccount anotado | **bastion** | `terraform -chdir=irsa apply` |
 | 7 | `exposicao` | Deployment + Service ClusterIP + Ingress (ALB) | **bastion** | `terraform -chdir=exposicao apply` |
+| 8 | `demo-s3-writer` | Bucket S3 + IRSA de **escrita** (prefixo) + app + Ingress + NetworkPolicy p/ ALB | **bastion** | `terraform -chdir=demo-s3-writer apply` |
 
 > **Por que muda "de onde roda"?** A API do cluster é **privada**. Stacks 1–3 só
-> mexem na AWS (rodam da sua máquina). Stacks 4–7 falam com a API do Kubernetes,
+> mexem na AWS (rodam da sua máquina). Stacks 4–8 falam com a API do Kubernetes,
 > então precisam rodar de **dentro da VPC** — pelo bastion (passos 3 e abaixo).
 > Para destruir: **ordem inversa** (7 → 1).
 
@@ -167,70 +171,141 @@ O módulo **`governanca`** cria, por namespace:
 ## 🚀 Como executar (você)
 
 ### 0. Bootstrap do backend (uma única vez)
-O bucket/tabela do state precisam existir antes do `init`:
+Só o bucket S3 precisa existir antes do `init`. O lock é **nativo do S3**
+(`use_lockfile = true`), então **não precisa de tabela DynamoDB** (Terraform >= 1.10):
 ```bash
 aws s3api create-bucket --bucket SEU-BUCKET-TFSTATE --region us-east-1
 aws s3api put-bucket-versioning --bucket SEU-BUCKET-TFSTATE \
   --versioning-configuration Status=Enabled
-aws dynamodb create-table --table-name terraform-locks \
-  --attribute-definitions AttributeName=LockID,AttributeType=S \
-  --key-schema AttributeName=LockID,KeyType=HASH \
-  --billing-mode PAY_PER_REQUEST --region us-east-1
 ```
-Depois edite `resources/backend.hcl` com o nome do bucket/tabela e exporte as
-variáveis comuns (valem para todos os stacks):
+Depois crie seu `backend.hcl` a partir do exemplo (ele é git-ignored, fica só
+local) e exporte as variáveis comuns (valem para todos os stacks):
+```bash
+cp resources/backend.hcl.example resources/backend.hcl
+# edite resources/backend.hcl com o nome do seu bucket
+```
 ```bash
 export TF_VAR_state_bucket="SEU-BUCKET-TFSTATE"
 export TF_VAR_region="us-east-1"
 ```
 
-### 1. Apply de cada stack, NA ORDEM
-Cada pasta em `resources/` é um stack independente. O `init` usa o backend
-compartilhado (`-backend-config=../backend.hcl`); a `key` do state já está fixada
-no `versions.tf` de cada stack.
+> A partir daqui, **crie um recurso (stack) de cada vez**, na ordem.
+> Todo `init` usa o backend compartilhado (`-backend-config=../backend.hcl`);
+> a `key` do state já está fixada no `versions.tf` de cada stack.
+> Em todos os passos abaixo, parta de dentro da pasta `resources/`:
+> ```bash
+> cd resources
+> ```
 
+### 1. Recurso `network` (VPC, subnets, NAT) — _da sua máquina_
 ```bash
-cd resources
-
-for stack in network eks; do
-  terraform -chdir=$stack init -backend-config=../backend.hcl
-  terraform -chdir=$stack apply
-done
+terraform -chdir=network init -backend-config=../backend.hcl
+terraform -chdir=network plan
+terraform -chdir=network apply
 ```
-> ⏳ `network` + `eks` levam ~15 min. **Pare aqui e suba o bastion** para ter
-> acesso de dentro da VPC (os próximos stacks tocam o cluster privado):
 
+### 2. Recurso `eks` (cluster privado, OIDC/IRSA, nós) — _da sua máquina_
+```bash
+terraform -chdir=eks init -backend-config=../backend.hcl
+terraform -chdir=eks plan
+terraform -chdir=eks apply        # ⏳ ~15 min
+```
+
+### 3. Recurso `bastion` (EC2 SSM + VPC endpoints SSM) — _da sua máquina_
 ```bash
 terraform -chdir=bastion init -backend-config=../backend.hcl
+terraform -chdir=bastion plan
 terraform -chdir=bastion apply
 ```
+> Este stack também gerencia as **preferências do Session Manager** (documento
+> regional `SSM-SessionManagerRunShell`), deixando o `kmsKeyId` vazio por padrão
+> (sem KMS). Isso evita o erro `Error calling KMS GenerateDataKey ... Key does
+> not exist` que encerra a sessão quando o doc aponta para uma KMS key deletada.
+>
+> ⚠️ Se a conta **já tiver** esse documento (configurado pelo console ou lab
+> anterior), o `apply` acusa `DocumentAlreadyExists`. Faça a reconciliação **uma
+> vez**:
+> ```bash
+> terraform -chdir=bastion import \
+>   'module.bastion.aws_ssm_document.session_prefs[0]' SSM-SessionManagerRunShell
+> terraform -chdir=bastion apply   # corrige o kmsKeyId
+> ```
+> Para manter criptografia KMS, passe `session_kms_key_id` com uma key válida.
 
-### 2. Acessar via bastion (endpoint é privado)
+### 4. Acessar o cluster via bastion (a API é privada)
 ```bash
-# Conecta no bastion via SSM (sem SSH). Precisa do session-manager-plugin local.
+# Abre sessão SSM (sem SSH). Precisa do session-manager-plugin local.
 $(terraform -chdir=bastion output -raw bastion_connect)
 
-# Já dentro do bastion (kubectl/helm/aws-cli pré-instalados):
+# Já DENTRO do bastion (kubectl/helm/aws-cli pré-instalados).
+# Clone o repo aqui (ou via VPN) para rodar os próximos stacks:
 aws eks update-kubeconfig --name lab-arquitetura --region us-east-1
 kubectl get nodes
 ```
+> ⚠️ Os passos 5–9 falam com a API do Kubernetes, então rodam **de dentro do
+> bastion**. Lá também exporte `TF_VAR_state_bucket` e `TF_VAR_region`.
 
-### 3. Stacks que tocam o cluster (rode de DENTRO do bastion)
-Como a API é privada, os stacks `lb-controller`, `governanca`, `irsa` e
-`exposicao` precisam ser aplicados de onde se alcança o endpoint — ex.: do
-bastion (clone o repo lá ou use VPN). Ordem:
+### 5. Recurso `lb-controller` (Ingress/ALB) — _do bastion_
 ```bash
-for stack in lb-controller governanca irsa exposicao; do
-  terraform -chdir=$stack init -backend-config=../backend.hcl
-  terraform -chdir=$stack apply
-done
+terraform -chdir=lb-controller init -backend-config=../backend.hcl
+terraform -chdir=lb-controller plan
+terraform -chdir=lb-controller apply
 ```
 
-### 4. Destruir (faça isso!) — ordem INVERSA
+### 6. Recurso `governanca` (namespace + quotas + netpol) — _do bastion_
 ```bash
-for stack in exposicao irsa governanca lb-controller bastion eks network; do
-  terraform -chdir=$stack destroy
-done
+terraform -chdir=governanca init -backend-config=../backend.hcl
+terraform -chdir=governanca plan
+terraform -chdir=governanca apply
+```
+
+### 7. Recurso `irsa` (Role IAM + ServiceAccount) — _do bastion_
+```bash
+terraform -chdir=irsa init -backend-config=../backend.hcl
+terraform -chdir=irsa plan
+terraform -chdir=irsa apply
+```
+
+### 8. Recurso `exposicao` (deployment + service + ingress) — _do bastion_
+```bash
+terraform -chdir=exposicao init -backend-config=../backend.hcl
+terraform -chdir=exposicao plan
+terraform -chdir=exposicao apply
+terraform -chdir=exposicao output ingress_hostname   # DNS do ALB (~2 min)
+```
+
+### 9. Recurso `demo-s3-writer` (app que ESCREVE no S3 via IRSA) — _do bastion_
+Demonstra o caminho completo **Internet → ALB → Pod (IRSA) → S3**, com permissão
+de **escrita escopada** a um prefixo e uma **NetworkPolicy** liberando o ALB (sem
+ela o `default-deny` da governança bloquearia o Ingress).
+```bash
+terraform -chdir=demo-s3-writer init -backend-config=../backend.hcl
+terraform -chdir=demo-s3-writer plan
+terraform -chdir=demo-s3-writer apply
+terraform -chdir=demo-s3-writer output ingress_hostname   # DNS do ALB (~2 min)
+
+# Testar a escrita usando a MESMA ServiceAccount (Pod descartável com AWS CLI):
+BUCKET=$(terraform -chdir=demo-s3-writer output -raw bucket_name)
+SA=$(terraform -chdir=demo-s3-writer output -raw service_account_name)
+# --command é necessário: a imagem aws-cli tem 'aws' como entrypoint; sem ele o
+# 'sh -c ...' viraria argumento do aws ("invalid choice 'sh'").
+kubectl -n time-a run s3-test --rm -it --restart=Never \
+  --overrides="{\"spec\":{\"serviceAccountName\":\"$SA\"}}" \
+  --image=public.ecr.aws/aws-cli/aws-cli:latest \
+  --command -- sh -c "echo ola > /tmp/f && aws s3 cp /tmp/f s3://$BUCKET/demo-app/f"   # ✅ permitido
+# troque 'demo-app/f' por 'fora/f' -> AccessDenied (fora do prefixo demo-app/*)
+```
+
+### 10. Destruir — um de cada vez, em ORDEM INVERSA
+```bash
+terraform -chdir=demo-s3-writer destroy  # do bastion
+terraform -chdir=exposicao    destroy   # do bastion
+terraform -chdir=irsa         destroy   # do bastion
+terraform -chdir=governanca   destroy   # do bastion
+terraform -chdir=lb-controller destroy  # do bastion
+terraform -chdir=bastion      destroy   # da sua máquina
+terraform -chdir=eks          destroy   # da sua máquina
+terraform -chdir=network      destroy   # da sua máquina
 ```
 
 ---
